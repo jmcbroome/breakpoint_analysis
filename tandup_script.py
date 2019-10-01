@@ -130,12 +130,13 @@ def main():
     print('Fixed Longer Than Rares:', mannwhitneyu(rares,fixed,alternative='less')[1])
 
     #making a plot for the paper.
+    plt.rcParams.update({'font.size': 22})
     plt.figure(figsize = (10,8))
-    panel1 = plt.axes([1/5,1/4,3/5,1/2])
+    panel1 = plt.axes([1/6,1/8,4/6,3/4])
     plt.title('Duplication Lengths')
     panel1.set_xlim(.5,3.5)
     # panel1.set_xlabel('Inversion Frequency Type')
-    panel1.set_ylabel('Length (log10(kbp))')
+    panel1.set_ylabel(r'-log$\mathregular{_{10}}$(kbp)')
     panel1.set_yticks([10000,20000,30000,40000,50000,60000])
     panel1.set_yticklabels([10,20,30,40,50,60])
     panel1.set_xticks([1,2,3])
@@ -178,7 +179,7 @@ def main():
         panel1.plot([r,r],[seventyfifth, ninetyfifth], color = 'black', linewidth = 1)
         panel1.plot([r-1/7,r+1/7],[ninetyfifth,ninetyfifth], color = 'black', linewidth = 1)
 
-    plt.savefig('tandup_wlog.png')
+    plt.savefig('tandup_wlog.png', dpi = 600)
 
 if __name__ == "__main__":
     main()

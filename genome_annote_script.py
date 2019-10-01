@@ -7,12 +7,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import statistics as st
-from scipy.stats import mannwhitneyu, fisher_exact
+from scipy.stats import mannwhitneyu, fisher_exact, percentileofscore
 import math
 import random
 
 chromlen = {'2L':23515712, '2R':25288936, '3L':25288936, '3R':32081331, 'X':23544271, '4':1830000} #values as of DM6 assembly, chr 2/3/X only for first testing, chr4 an estimate
-#define functions/classes
 
 def argparser():
     parser = argparse.ArgumentParser()
@@ -170,18 +169,22 @@ def main():
     #run tests
     gathered_subsamples = {f:{e:[] for e in annotation.keys()} for f in list(set(crdata['Freq']))}
     gathered_rvals = {f:{e:[] for e in annotation.keys()} for f in list(set(crdata['Freq']))}
-    for ftype in list(set(crdata['Freq'])):
-        crdat = crdata.loc[crdata['Freq'] == ftype]
-        for etype, edict in annotation.items():
-            print(ftype, 'interrupting', etype)
-            try:
-                e,r,p,s = inter_permuter(crdat, edict, pnum = 1000)
-                print(e,r,p)
-                gathered_subsamples[ftype][etype].append(s)
-                gathered_rvals[ftype][etype] = r
-            except KeyError:
-                continue
-    #             print(edict)
-
+    #now do some comparatives for gene and mrna based stuff.
+    #now do some comparatives for gene and mrna based stuff.
+    for etype in ['gene','mRNA','polytad']:
+    # for etype in ['polytad']:
+        print("Analyzing {}".format(etype))
+        tdat = {}
+        for ftype in ['Fixed', 'Common', 'Rare']:
+            crdat1 = crdata.loc[crdata['Freq'] == ftype]
+            e1,r1,p1,ss1 = inter_permuter(crdat1,annotation[etype], pnum = 1000, adjust = False)
+            tdat[ftype] = (e1, r1, p1, ss1) 
+        for k, vs in tdat.items():
+            e1, r1, p1, ss1 = vs
+            print("For {}, real value {}, percentile {}, where {} is 5th percentile of expectations".format(k, r1['Int'], percentileofscore([e[1] for e in ss1], r1["Int"]), np.percentile([e[1] for e in ss1], 5)))
+            fe_pv = fisher_exact([[r1['Non'], r1["Int"]],[np.mean([e[0] for e in ss1]), np.mean([e[1] for e in ss1])]])[1]
+            print([list(r1.values()),[np.mean([e[0] for e in ss1]), np.mean([e[1] for e in ss1])]])
+            print("Fisher's Exact Comparison pval: {}".format(fe_pv))
+            print("##")
 if __name__ == "__main__":
     main()
