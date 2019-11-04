@@ -11,7 +11,7 @@ from scipy.stats import mannwhitneyu, fisher_exact, percentileofscore
 import math
 import random
 
-chromlen = {'2L':23515712, '2R':25288936, '3L':25288936, '3R':32081331, 'X':23544271, '4':1830000} #values as of DM6 assembly, chr 2/3/X only for first testing, chr4 an estimate
+chromlen = {'2L':23515712, '2R':25288936, '3L':28110227, '3R':32081331, 'X':23544271, '4':1830000} #values as of DM6 assembly, chr 2/3/X only for first testing, chr4 an estimate
 
 def argparser():
     parser = argparse.ArgumentParser()

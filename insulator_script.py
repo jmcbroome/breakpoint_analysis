@@ -127,7 +127,7 @@ def main():
     with open(args.insulator, 'r') as insulators:
         #data structure is two dicts, key of chromosome, value of a set of insulator element points
         #treating as point bases because all binding sites are 10 bases long
-        chromlen = {'2L':23515712, '2R':25288936, '3L':25288936, '3R':32081331, 'X':23544271, '4':1830000} #values as of DM6 assembly, chr 2/3/X only for first testing, chr4 an estimate
+        chromlen = {'2L':23515712, '2R':25288936, '3L':28110227, '3R':32081331, 'X':23544271, '4':1830000} #values as of DM6 assembly, chr 2/3/X only for first testing, chr4 an estimate
         class1 = {k:[] for k in chromlen.keys()}
         class2 = {k:[] for k in chromlen.keys()}
         for entry in insulators.readlines():

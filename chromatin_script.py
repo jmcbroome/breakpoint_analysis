@@ -29,7 +29,7 @@ def tandem_dup(crdata):
         dups.append(abs(int(entry[2])-int(entry[3])))
     return dups
 
-chromlen = {'2L':23515712, '2R':25288936, '3L':25288936, '3R':32081331, 'X':23544271, '4':1830000} #values as of DM6 assembly, chr 2/3/X only for first testing, chr4 an estimate
+chromlen = {'2L':23515712, '2R':25288936, '3L':28110227, '3R':32081331, 'X':23544271, '4':1830000} #values as of DM6 assembly, chr 2/3/X only for first testing, chr4 an estimate
 
 #chromatin functions and classes
 def GFFRead(filename):
