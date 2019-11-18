@@ -100,10 +100,7 @@ def main():
                 continue
     crdata = pd.DataFrame(common_rares[:-3])
     crdata.columns = ['Chro','Label','Forward','Reverse','Freq']
-    dups = tandem_dup(crdata)
-    dups = pd.DataFrame(dups)
-    dups.columns = ["TanDup"]
-    crdata = pd.concat([crdata, dups], 1)
+
     fixed_singles = []
     with open(args.fixed, 'r') as fixinv:
         for entry in fixinv.readlines():
@@ -111,15 +108,18 @@ def main():
             #need a unique identifier for each one.
             if len(spent) == 9:
                 invid = spent[0]
-                fixed_singles.append([spent[1], invid, spent[6], spent[7], spent[8]])
+                fixed_singles.append([spent[1], invid, spent[6], spent[7]])
             else:
-                fixed_singles.append([spent[0], invid, spent[5], spent[6], spent[7]])
+                fixed_singles.append([spent[0], invid, spent[5], spent[6]])
     fixed_singles = pd.DataFrame(fixed_singles)
-    fixed_singles.columns = ['Chro','Label','Forward','Reverse','TanDup']
+    fixed_singles.columns = ['Chro','Label','Forward','Reverse']
     fixed_singles['Freq'] = 'Fixed'
     fixed_singles = fixed_singles.drop(19)
     crdata = pd.concat([crdata, fixed_singles], ignore_index = True)
-
+    dups = tandem_dup(crdata)
+    dups = pd.DataFrame(dups)
+    dups.columns = ["TanDup"]
+    crdata = pd.concat([crdata, dups], 1)
     coms = list(crdata.loc[crdata['Freq'] == 'Common']['TanDup'])
     rares = list(crdata.loc[crdata['Freq'] == 'Rare']['TanDup'])
     fixed = list(crdata.loc[crdata['Freq'] == 'Fixed']['TanDup'].astype(int))
