@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-
+#NOT A COMPLETE IMPLEMENTATION.
 #import
 import argparse
 import pandas as pd
@@ -7,66 +6,31 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import statistics as st
-from scipy.stats import mannwhitneyu, fisher_exact, percentileofscore
+from scipy.stats import mannwhitneyu
 import math
 import random
-
-chromlen = {'2L':23515712, '2R':25288936, '3L':28110227, '3R':32081331, 'X':23544271, '4':1830000} #values as of DM6 assembly, chr 2/3/X only for first testing, chr4 an estimate
+#import from other scripts.
+from genome_annote_script import inter_checker
+from insulator_script import insulator_search, insulator_track
+from tandup_script import tandem_dup
+from chromatin_script import *
 
 def argparser():
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', type = bool, help = "Set to True to print status updates. Default True", default = True)
-    parser.add_argument('-f', '--file', help = 'Path to the file with common and rare breakpoint information', default = '../common_inv_all_v2.tsv')
+    parser.add_argument('-f', '--file', help = 'Path to the file with common and rare breakpoint information', default = '../common_inv_all.txt')
     parser.add_argument('-x', '--fixed', help = 'Path to the file containing fixed breakpoints (different format from the other file', default = '../fixed_inv_2.txt')
-    parser.add_argument('-a', '--annote', help = 'Path to the annotation file', default = '../public_datasets/GCF_000001215.4_Release_6_plus_ISO1_MT_genomic.gff')
+    parser.add_argument('-c', '--chromatin', help = 'Path to the chromatin file', default = '../public_datasets/droso_chromatin_r6.GFF3')
+    parser.add_argument('-a', '--annote', help = 'Path to the annotation file.', default = '../public_datasets/GCF_000001215.4_Release_6_plus_ISO1_MT_genomic.gff')
     parser.add_argument('-p', '--polytene', help = 'Path to the polytene TAD file.', default = '../public_datasets/POLYTENE_TADS_R6.txt')
-    parser.add_argument('-t', '--tads', help = 'Path to the non-polytene TAD file.', default = '../public_datasets/sexton_tads_r6.txt')
+    parser.add_argument('-i', '--insulator', help = 'Path to the insulator annotation file', default = '../public_datasets/GSE26905_Dm_Insulator_Classes_r6.GFF3')
+    parser.add_argument('-t', '--tads', help = 'Path to the non-polytene TAD file', default = '../public_datasets/sexton_tads_fulldata.txt')
     args = parser.parse_args()
     return args
-    
-def tandem_dup(crdata):
-    dups = []
-    for entry in np.array(crdata):
-        dups.append(abs(int(entry[2])-int(entry[3])))
-    return dups
 
-def inter_checker(breakpoint, annote, etype = False):
-    #takes a single breakpoint coordinate as a tuple of chro and two integers and checks to see what it interrupts in annote
-    #if etype == True, returns the fourth string value of the tuple. 
-    for element in annote[breakpoint[0]]:
-        if element[0] < int(breakpoint[1]) < element[1] and element[0] < int(breakpoint[2]) < element[1]:
-            if etype:
-                return ("Int", element[2])
-            else:  
-                return "Int"
-    if etype:
-        return ('Non', 'N/A_N/A')
-    else:
-        return "Non"
+chromlen = {'2L':23515712, '2R':25288936, '3L':28110227, '3R':32081331, 'X':23544271, '4':1830000} #values as of DM6 assembly, chr 2/3/X only for first testing, chr4 an estimate
 
-def inter_permuter(crdata, annotations, pnum = 500):
-    einterrat = {'Non':0, 'Int':0}
-    subsamples = []
-    for p in range(0, pnum):
-        sub = {k:0 for k in einterrat.keys()}
-        for i, entry in crdata.iterrows():
-            rand = random.choice(range(0,chromlen[entry['Chro']]-int(entry['TanDup'])))
-            fbp = (entry['Chro'], rand, rand + int(entry['TanDup']))
-            fint = inter_checker(fbp, annotations)
-            einterrat[fint] += 1
-            sub[fint] += 1
-        subsamples.append([sub[e] for e in ['Non', 'Int']])
-    rinterrat = {'Non':0, 'Int':0}
-    for i, entry in crdata.iterrows():
-        rbp = (entry['Chro'], entry['Forward'], entry['Reverse'])
-        rint = inter_checker(rbp, annotations)
-        rinterrat[rint] += 1
-    pval = fisher_exact([list(einterrat.values()),list(rinterrat.values())])[1]
-    return einterrat, rinterrat, pval, subsamples
-
-def main():
-    args = argparser()
-    
+def read_annotation(args):
     annotation = {}
     genespan = {}
     cchro = 'X'
@@ -132,25 +96,33 @@ def main():
             spent = entry.strip().split()
             polytad[spent[0]].append((int(spent[1]), int(spent[2])))
     annotation['polytad'] = polytad
+    return annotation
+
+def read_sexton(args, annotation):
     #additional tad data incorporated as a separate set
     sexton_tad = {k:[] for k in chromlen.keys()}
     with open(args.tads,'r') as ptadf:
         for entry in ptadf.readlines():
-            spent = entry.strip().split()
-            sexton_tad[spent[0]].append((int(spent[1]), int(spent[2])))
+            if len(entry.strip()) > 0:
+                spent = entry.strip().split()
+                if spent[0] == '"Table' or spent[0] == 'domain':
+                    continue
+                sexton_tad[spent[1]].append((int(spent[2]), int(spent[3]), spent[0] + "_" + spent[4]))
     annotation['sexton_tad'] = sexton_tad
+    return annotation
 
-    common_rares = []
-    with open(args.file, 'r') as cinv:
-        for entry in cinv.readlines()[1:]:
+def main():
+    args = argparser()
+    with open(args.file, 'r') as crinf:
+        #read in the .tsv file with inversion coordinates and frequencies
+        common_rares = []
+        for entry in crinf.readlines()[1:]:
             spent = entry.strip().split()
             try:
-                if (len(spent) >= 9 and spent[1] == 'Common') or len(spent) >= 10:
+                if len(spent) >= 9:
                     invid = spent[0]
                     chrom = invid[3:5]
                     rare = spent[1]
-    #                 if chrom[0] == '7':
-    #                     print(spent)
                     if chrom[1] == ')':
                         chrom = chrom[0]
                     if spent[3][0] == 'P' or spent[3][0] == 'C':
@@ -161,6 +133,7 @@ def main():
                     common_rares.append([chrom, invid, spent[0], spent[1], rare])
             except IndexError:
                 continue
+    #define the dataframe.
     crdata = pd.DataFrame(common_rares[:-3])
     crdata.columns = ['Chro','Label','Forward','Reverse','Freq']
     fixed_singles = []
@@ -176,44 +149,63 @@ def main():
     fixed_singles = pd.DataFrame(fixed_singles)
     fixed_singles.columns = ['Chro','Label','Forward','Reverse']
     fixed_singles['Freq'] = 'Fixed'
-    fixed_singles = fixed_singles.drop(19)
+    fixed_singles = fixed_singles.drop(19) #this particular break is bad data
     crdata = pd.concat([crdata, fixed_singles], ignore_index = True)
     crdata = crdata[['Chro','Label','Forward','Reverse','Freq']]
     crdata['TanDup'] = [abs(int(crdata['Forward'][i])-int(crdata['Reverse'][i])) for i in range(len(crdata['Forward']))]
+    #add chromatin data
+    gff = GFFRead(args.chromatin)[1]
+    nines = []
+    for entry in gff:
+        if int(entry[4][3]) == 9:
+            nines.append([entry[0][:2]] + entry[1:4] + ['9_state'])
+    test = chromatin(nines)
+    pixels = pixelate(test.chrom, 10000)
+    chrodist= makedist(np.array(crdata), pixels)
+    crdata = pd.concat([crdata, chrodist], 1)
+    trinvec = chrombinary(np.array(crdata.loc[:,range(1,10)]))
+    crdata['Activity'] = trinvec
+    #add insulator data
+    with open(args.insulator, 'r') as insulators:
+        #data structure is two dicts, key of chromosome, value of a set of insulator element points
+        #treating as point bases because all binding sites are 10 bases long
+        chromlen = {'2L':23515712, '2R':25288936, '3L':28110227, '3R':32081331, 'X':23544271, '4':1830000} #values as of DM6 assembly, chr 2/3/X only for first testing, chr4 an estimate
+        class1 = {k:[] for k in chromlen.keys()}
+        for entry in insulators.readlines():
+            spent = entry.strip().split()
+            if len(spent) > 8:
+                try:
+                    if spent[9] == 'I':
+                        class1[spent[0][3:]].append(int(spent[3]))
+                except:
+                    continue
+    crdata['InsDist'] = [v for v in insulator_track(class1, crdata)]
+    #add annotation interruption data
+    annotation = read_annotation(args)
+    annotation = read_sexton(args, annotation) #additional annotation data incorporated.
+    int_vecs = {e:[] for e in ['gene','mRNA','polytad']}
+    for etype, chroms in annotation.items():
+        if etype in int_vecs.keys():
+            for i, entry in crdata.iterrows():
+                state = inter_checker((entry['Chro'],entry['Forward'],entry['Reverse']),chroms)
+                int_vecs[etype].append(state)
+    for e, vec in int_vecs.items():
+        crdata[e] = vec
+    #more complex sexton et al tad data
+    chroms = annotation['sexton_tad']
+    sexton_int = []
+    sexton_lab = []
+    sexton_state = []
+    for i, entry in crdata.iterrows():
+        ints, edat = inter_checker((entry['Chro'],entry['Forward'],entry['Reverse']),chroms, etype = True)
+        sexton_int.append(ints)
+        label, state = edat.split("_")
+        sexton_lab.append(label)
+        sexton_state.append(state)
+    crdata['sexton_tad'] = sexton_int
+    crdata['sexton_lab'] = sexton_lab
+    crdata['sexton_state'] = sexton_state
+    crdata.to_csv('full_crdata.csv')
 
-    #drop the potential false positive rares.
-    #names = ['In(2R)DL4', 'In(3L)DL5', 'In(3L)DL7', 'In(3L)DL9', 'In(3L)DL11', 'In(3R)DL12', 'In(3R)DL13']
-    #crdata = crdata.loc[~crdata['Label'].isin(names)].reset_index(drop=True)
-    #or drop all but high confidence rares
-    names = ['In(2L)DL3','In(2R)Y1a','In(2R)MAL_1*','In(2R)MAL_2*',"In(3L)DL10","In(3R)Gb"]
-    crdata = crdata.loc[(crdata['Label'].isin(names)) | (crdata['Freq'] != 'Rare')].reset_index(drop=True)    
-    
-    #run tests
-    # gathered_subsamples = {f:{e:[] for e in annotation.keys()} for f in list(set(crdata['Freq']))}
-    # gathered_rvals = {f:{e:[] for e in annotation.keys()} for f in list(set(crdata['Freq']))}
-    #now do some comparatives for gene and mrna based stuff.
-#now do some comparatives for gene and mrna based stuff.
-    for etype in ['gene','polytad']:
-    # for etype in ['polytad']:
-        print("Analyzing {}".format(etype))
-        tdat = {}
-        for ftype in ['Fixed', 'Common', 'Rare', 'ComRare']:
-            if ftype != 'ComRare':
-                crdat1 = crdata.loc[crdata['Freq'] == ftype]
-            else:
-                crdat1 = crdata[crdata.Freq.isin(['Common','Rare'])]
-    #         for ftype2 in ['Fixed','Common','Rare']:
-    #             crdat2 = crdata.loc[crdata['Freq'] == ftype2]
-    #             if ftype != ftype2:
-            e1,r1,p1,ss1 = inter_permuter(crdat1,annotation[etype], pnum = 1000)
-            tdat[ftype] = (e1, r1, p1, ss1) 
-    #         e2,r2,p2,ss2 = inter_permuter(crdat2,annotation[etype], pnum = 1000, adjust = False)
-        for k, vs in tdat.items():
-            e1, r1, p1, ss1 = vs
-            print("For {}, real value {}, percentile {}, where {} is 5th percentile of expectations and {} is 95th percentile of expectations".format(k, r1['Int'], percentileofscore([e[1] for e in ss1], r1["Int"]), np.percentile([e[1] for e in ss1], 5), np.percentile([e[1] for e in ss1],95)))
-            fe_pv = fisher_exact([[r1['Non'], r1["Int"]],[np.mean([e[0] for e in ss1]), np.mean([e[1] for e in ss1])]])[1]
-            print([list(r1.values()),[np.mean([e[0] for e in ss1]), np.mean([e[1] for e in ss1])]])
-            print("Fisher's Exact Comparison pval: {}".format(fe_pv))
-            print("##") 
 if __name__ == "__main__":
-    main()
+    main()    

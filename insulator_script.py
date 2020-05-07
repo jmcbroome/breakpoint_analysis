@@ -7,17 +7,18 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import statistics as st
-from scipy.stats import mannwhitneyu, fisher_exact
+from scipy.stats import mannwhitneyu, fisher_exact, percentileofscore
 import math
 import random
 #define functions/classes
+chromlen = {'2L':23515712, '2R':25288936, '3L':28110227, '3R':32081331, 'X':23544271, '4':1830000} #values as of DM6 assembly, chr 2/3/X only for first testing, chr4 an estimate
 
 def argparser():
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', type = bool, help = "Set to True to print status updates. Default True", default = True)
-    parser.add_argument('-f', '--file', help = 'Path to the file with common and rare breakpoint information', default = 'common_inv_all.txt')
-    parser.add_argument('-x', '--fixed', help = 'Path to the file containing fixed breakpoints (different format from the other file', default = 'fixed_inv_2.txt')
-    parser.add_argument('-i', '--insulator', help = 'Path to the insulator annotation file', default = 'public_datasets/GSE26905_Dm_Insulator_Classes_r6.GFF3')
+    parser.add_argument('-f', '--file', help = 'Path to the file with common and rare breakpoint information', default = '../common_inv_all_v2.tsv')
+    parser.add_argument('-x', '--fixed', help = 'Path to the file containing fixed breakpoints (different format from the other file', default = '../fixed_inv_2.txt')
+    parser.add_argument('-i', '--insulator', help = 'Path to the insulator annotation file', default = '../public_datasets/GSE26905_Dm_Insulator_Classes_r6_v2.GFF3')
     args = parser.parse_args()
     return args
 
@@ -40,6 +41,12 @@ def insulator_track(classx, bpdata):
     for spent in np.array(bpdata):
         minis = 100000000000000
         minie = 100000000000000
+        try:
+            vec = classx[spent[0]]
+        except KeyError:
+            print("NaNs introduced")
+            print(spent)
+            continue
         for element in classx[spent[0]]:
             if abs(int(element) - int(spent[2])) < abs(minis):
                 minis = abs(int(element) - int(spent[2]))
@@ -85,7 +92,7 @@ def main():
         for entry in cinv.readlines()[1:]:
             spent = entry.strip().split()
             try:
-                if len(spent) >= 9:
+                if (len(spent) >= 9 and spent[1] == 'Common') or len(spent) >= 10:
                     invid = spent[0]
                     chrom = invid[3:5]
                     rare = spent[1]
@@ -103,10 +110,6 @@ def main():
                 continue
     crdata = pd.DataFrame(common_rares[:-3])
     crdata.columns = ['Chro','Label','Forward','Reverse','Freq']
-    dups = tandem_dup(crdata)
-    dups = pd.DataFrame(dups)
-    dups.columns = ["TanDup"]
-    crdata = pd.concat([crdata, dups], 1)
     fixed_singles = []
     with open(args.fixed, 'r') as fixinv:
         for entry in fixinv.readlines():
@@ -114,15 +117,18 @@ def main():
             #need a unique identifier for each one.
             if len(spent) == 9:
                 invid = spent[0]
-                fixed_singles.append([spent[1], invid, spent[6], spent[7], spent[8]])
+                fixed_singles.append([spent[1], invid, spent[6], spent[7]])
             else:
-                fixed_singles.append([spent[0], invid, spent[5], spent[6], spent[7]])
+                fixed_singles.append([spent[0], invid, spent[5], spent[6]])
     fixed_singles = pd.DataFrame(fixed_singles)
-    fixed_singles.columns = ['Chro','Label','Forward','Reverse','TanDup']
+    fixed_singles.columns = ['Chro','Label','Forward','Reverse']
     fixed_singles['Freq'] = 'Fixed'
     fixed_singles = fixed_singles.drop(19)
     crdata = pd.concat([crdata, fixed_singles], ignore_index = True)
-    crdata = crdata[['Chro','Label','Forward','Reverse','Freq','TanDup']]
+    crdata = crdata[['Chro','Label','Forward','Reverse','Freq']]
+    crdata['TanDup'] = [abs(int(crdata['Forward'][i])-int(crdata['Reverse'][i])) for i in range(len(crdata['Forward']))]
+
+    
     #read in insulators
     with open(args.insulator, 'r') as insulators:
         #data structure is two dicts, key of chromosome, value of a set of insulator element points
@@ -132,6 +138,12 @@ def main():
         class2 = {k:[] for k in chromlen.keys()}
         for entry in insulators.readlines():
             spent = entry.strip().split()
+            #trying an alternative bed file that is easier to parse.
+            #try:
+            #    class1[spent[0]].append(int(spent[1]))
+            #except:
+            #    print("Can't locate entry", entry)
+
             if len(spent) > 8:
                 try:
                     if spent[9] == 'I':
@@ -140,6 +152,7 @@ def main():
                         class2[spent[0][3:]].append(int(spent[3]))
                 except:
                     continue
+  
     #class 1 insulators are the ones that exhibit blockage properties in the literature
     t = insulator_permuter(class1, crdata)
     td = pd.DataFrame(columns = ['InsDist_exp'])
@@ -153,23 +166,32 @@ def main():
     crdata = pd.concat([crdata,rv],1)
     crdata = crdata.loc[:,~crdata.columns.duplicated()]
 
+    #drop the potential false positive rares.
+    #names = ['In(2R)DL4', 'In(3L)DL5', 'In(3L)DL7', 'In(3L)DL9', 'In(3L)DL11', 'In(3R)DL12', 'In(3R)DL13']
+    #crdata = crdata.loc[~crdata['Label'].isin(names)]
+    #or drop all but high confidence rares
+    names = ['In(2L)DL3','In(2R)Y1a','In(2L)MAL_1*','In(2R)MAL_2*',"In(3L)DL10","In(3R)Gb"]
+    crdata = crdata.loc[(crdata['Label'].isin(names)) | (crdata['Freq'] != 'Rare')].reset_index(drop=True)
+    
     c = [e for e in crdata.loc[crdata['Freq'] == 'Common']['InsDist'] if abs(e) < 100000]
     a = [e for e in crdata.loc[crdata['Freq'] == 'Rare']['InsDist'] if abs(e) < 100000]
     x = [e for e in crdata.loc[crdata['Freq'] == 'Fixed']['InsDist'] if abs(e) < 100000]
     # f = [e for e in crdata['InsDist_exp'].astype(int) if abs(e) < 100000]
     fperms = insulator_permuter(class1, crdata, 1000)
+    #calculate a vector of mean values for fperms to do a percentile mean test.
+    fperm_means = [np.median([f for f in fs if f < 100000]) for fs in fperms]
     #flatten fperms
     f = []
     for fs in fperms:
         for s in fs:
             f.append(s)
-    f = [e for e in f if abs(e) < 100000]
-    print('Fixed closer than Expected:',mannwhitneyu(x,f,alternative='less')[1])
-    print('Coommon closer than Expected:',mannwhitneyu(c,f,alternative='less')[1])
-    print('Rare closer than Expected:',mannwhitneyu(a,f,alternative='less')[1])
-    print('Fixed closer than Common:',mannwhitneyu(c,x,alternative='greater')[1])
-    print('Fixed closer than Rare:',mannwhitneyu(a,x,alternative='greater')[1])
-    print('Common closer than Rare:',mannwhitneyu(c,a,alternative='less')[1])
+    f = [e for e in f if abs(e) < 100000]    
+    print('Fixed closer than Expected MWU:',mannwhitneyu(x,f,alternative='less')[1],'PercentofMedian',percentileofscore(fperm_means, np.median(x)), np.mean(fperm_means), np.median(x))
+    print('Coommon closer than Expected MWU:',mannwhitneyu(c,f,alternative='less')[1], 'PercentofMedian',percentileofscore(fperm_means, np.median(c)), np.mean(fperm_means), np.median(c))
+    print('Rare closer than Expected MWU:',mannwhitneyu(a,f,alternative='less')[1], 'PercentofMedian',percentileofscore(fperm_means, np.median(a)), np.mean(fperm_means), np.median(a))
+    print('Fixed closer than Common MWU:',mannwhitneyu(c,x,alternative='greater')[1])
+    print('Fixed closer than Rare MWU:',mannwhitneyu(a,x,alternative='greater')[1])
+    print('Common closer than Rare MWU:',mannwhitneyu(c,a,alternative='less')[1])
 
 
 if __name__ == "__main__":

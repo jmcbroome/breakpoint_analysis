@@ -69,8 +69,8 @@ def build_coord_v2(i, xr, yr, w, h, md):
 def argparser():
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', type = bool, help = "Set to True to print status updates. Default True", default = True)
-    parser.add_argument('-f', '--file', help = 'Path to the file with common and rare breakpoint information', default = 'common_inv_all.txt')
-    parser.add_argument('-x', '--fixed', help = 'Path to the file containing fixed breakpoints (different format from the other file', default = 'fixed_inv_2.txt')       
+    parser.add_argument('-f', '--file', help = 'Path to the file with common and rare breakpoint information', default = '../common_inv_all.txt')
+    parser.add_argument('-x', '--fixed', help = 'Path to the file containing fixed breakpoints (different format from the other file', default = '../fixed_inv_2.txt')       
     args = parser.parse_args()
     return args
 
@@ -136,7 +136,7 @@ def main():
     plt.title('Duplication Lengths')
     panel1.set_xlim(.5,3.5)
     # panel1.set_xlabel('Inversion Frequency Type')
-    panel1.set_ylabel(r'-log$\mathregular{_{10}}$(kbp)')
+    panel1.set_ylabel(r'log$\mathregular{_{10}}$(bp)')
     panel1.set_yticks([10000,20000,30000,40000,50000,60000])
     panel1.set_yticklabels([10,20,30,40,50,60])
     panel1.set_xticks([1,2,3])

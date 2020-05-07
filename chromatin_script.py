@@ -15,9 +15,9 @@ import random
 def argparser():
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', type = bool, help = "Set to True to print status updates. Default True", default = True)
-    parser.add_argument('-f', '--file', help = 'Path to the file with common and rare breakpoint information', default = 'common_inv_all.txt')
-    parser.add_argument('-x', '--fixed', help = 'Path to the file containing fixed breakpoints (different format from the other file', default = 'fixed_inv_2.txt')
-    parser.add_argument('-c', '--chromatin', help = 'Path to the chromatin file', default = 'droso_chromatin_r6.GFF3')
+    parser.add_argument('-f', '--file', help = 'Path to the file with common and rare breakpoint information', default = '../common_inv_all_v2.tsv')
+    parser.add_argument('-x', '--fixed', help = 'Path to the file containing fixed breakpoints (different format from the other file', default = '../fixed_inv_2.txt')
+    parser.add_argument('-c', '--chromatin', help = 'Path to the chromatin file', default = '../public_datasets/droso_chromatin_r6.GFF3')
     
     args = parser.parse_args()
     return args
@@ -100,7 +100,7 @@ class pixelate:
         Data is expected in double dictionary format of chromosome-ctype ala chromatin.chrom.
         '''
         self.resolution = resolution
-        chromlen = {'2L':23515712, '2R':25288936, '3L':25288936, '3R':32081331, 'X':23544271, '4':1830000} #values as of DM6 assembly, chr 2/3/X only for first testing, chr4 an estimate
+        chromlen = {'2L':23515712, '2R':25288936, '3L':28110227, '3R':32081331, 'X':23544271, '4':1830000}        
         self.pixels = {c:{p:{t:0 for t in range(1,10)} for p in range(0, chromlen[c]+self.resolution, self.resolution)} for c in chromlen.keys()} #a triple nested dictionary - chromosome to pixel start coordinate to chromatin type.
         for chrom, ctype in data.items():
             for cname, ltups in ctype.items():
@@ -264,17 +264,18 @@ def chromo_permuter_trunc(crdata, pixels, pnum = 5):
 
 def main():
     args = argparser()
-    with open(args.file, 'r') as crinf:
-    
-        #read in the .tsv file with inversion coordinates and frequencies
-        common_rares = []
-        for entry in crinf.readlines()[1:]:
+    common_rares = []
+    #read in the .tsv file with inversion coordinates and frequencies
+    with open(args.file, 'r') as cinv:
+        for entry in cinv.readlines()[1:]:
             spent = entry.strip().split()
             try:
-                if len(spent) >= 9:
+                if (len(spent) >= 9 and spent[1] == 'Common') or len(spent) >= 10:
                     invid = spent[0]
                     chrom = invid[3:5]
                     rare = spent[1]
+    #                 if chrom[0] == '7':
+    #                     print(spent)
                     if chrom[1] == ')':
                         chrom = chrom[0]
                     if spent[3][0] == 'P' or spent[3][0] == 'C':
@@ -289,14 +290,39 @@ def main():
     #define a dataframe that will contain the break data for the rest of the analysis
     crdata = pd.DataFrame(common_rares[:-3])
     crdata.columns = ['Chro','Label','Forward','Reverse','Freq']
+    fixed_singles = []
+    with open(args.fixed, 'r') as fixinv:
+        for entry in fixinv.readlines():
+            spent = entry.strip().split()
+            #need a unique identifier for each one.
+            if len(spent) == 9:
+                invid = spent[0]
+                fixed_singles.append([spent[1], invid, spent[6], spent[7]])
+            else:
+                fixed_singles.append([spent[0], invid, spent[5], spent[6]])
+    fixed_singles = pd.DataFrame(fixed_singles)
+    fixed_singles.columns = ['Chro','Label','Forward','Reverse']
+    fixed_singles['Freq'] = 'Fixed'
+    fixed_singles = fixed_singles.drop(19)
+    crdata = pd.concat([crdata, fixed_singles], ignore_index = True)
+    crdata = crdata[['Chro','Label','Forward','Reverse','Freq']]
+    crdata['TanDup'] = [abs(int(crdata['Forward'][i])-int(crdata['Reverse'][i])) for i in range(len(crdata['Forward']))]
+
+    #drop the potential false positive rares.
+    #names = ['In(2R)DL4', 'In(3L)DL5', 'In(3L)DL7', 'In(3L)DL9', 'In(3L)DL11', 'In(3R)DL12', 'In(3R)DL13']
+    #crdata = crdata.loc[~crdata['Label'].isin(names)].reset_index(drop=True)
+    #or drop all but high confidence rares
+    names = ['In(2L)DL3','In(2R)Y1a','In(2L)MAL_1*','In(2R)MAL_2*',"In(3L)DL10","In(3R)Gb"]
+    crdata = crdata.loc[(crdata['Label'].isin(names)) | (crdata['Freq'] != 'Rare')].reset_index(drop=True)
+    
     gff = GFFRead(args.chromatin)[1]
     nines = []
-    thirties = []
+    #thirties = []
     for entry in gff:
         if int(entry[4][3]) == 9:
             nines.append([entry[0][:2]] + entry[1:4] + ['9_state'])
-        elif int(entry[4][3]) == 3:
-            thirties.append([entry[0][:2]] + entry[1:4] + ['30_state'])
+    #    elif int(entry[4][3]) == 3:
+    #        thirties.append([entry[0][:2]] + entry[1:4] + ['30_state'])
     #analysis proceeds with only nine-state data from this point; uses nine-state to determine active/inactive/mixed status of region.    
     test = chromatin(nines)
     pixels = pixelate(test.chrom, 10000)
