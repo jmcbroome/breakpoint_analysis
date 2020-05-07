@@ -170,8 +170,8 @@ def main():
     #names = ['In(2R)DL4', 'In(3L)DL5', 'In(3L)DL7', 'In(3L)DL9', 'In(3L)DL11', 'In(3R)DL12', 'In(3R)DL13']
     #crdata = crdata.loc[~crdata['Label'].isin(names)]
     #or drop all but high confidence rares
-    names = ['In(2L)DL3','In(2R)Y1a','In(2L)MAL_1*','In(2R)MAL_2*',"In(3L)DL10","In(3R)Gb"]
-    crdata = crdata.loc[(crdata['Label'].isin(names)) | (crdata['Freq'] != 'Rare')].reset_index(drop=True)
+    #names = ['In(2L)DL3','In(2R)Y1a','In(2L)MAL_1*','In(2R)MAL_2*',"In(3L)DL10","In(3R)Gb"]
+    #crdata = crdata.loc[(crdata['Label'].isin(names)) | (crdata['Freq'] != 'Rare')].reset_index(drop=True)
     
     c = [e for e in crdata.loc[crdata['Freq'] == 'Common']['InsDist'] if abs(e) < 100000]
     a = [e for e in crdata.loc[crdata['Freq'] == 'Rare']['InsDist'] if abs(e) < 100000]

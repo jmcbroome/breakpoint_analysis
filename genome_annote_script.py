@@ -185,8 +185,8 @@ def main():
     #names = ['In(2R)DL4', 'In(3L)DL5', 'In(3L)DL7', 'In(3L)DL9', 'In(3L)DL11', 'In(3R)DL12', 'In(3R)DL13']
     #crdata = crdata.loc[~crdata['Label'].isin(names)].reset_index(drop=True)
     #or drop all but high confidence rares
-    names = ['In(2L)DL3','In(2R)Y1a','In(2R)MAL_1*','In(2R)MAL_2*',"In(3L)DL10","In(3R)Gb"]
-    crdata = crdata.loc[(crdata['Label'].isin(names)) | (crdata['Freq'] != 'Rare')].reset_index(drop=True)    
+    #names = ['In(2L)DL3','In(2R)Y1a','In(2R)MAL_1*','In(2R)MAL_2*',"In(3L)DL10","In(3R)Gb"]
+    #crdata = crdata.loc[(crdata['Label'].isin(names)) | (crdata['Freq'] != 'Rare')].reset_index(drop=True)    
     
     #run tests
     # gathered_subsamples = {f:{e:[] for e in annotation.keys()} for f in list(set(crdata['Freq']))}
